@@ -60,6 +60,7 @@ For more information, please refer to the documentation.
 class MCPServer:
 
     get_tools_executions_toolname = "getToolExecutions"
+    hello_world_toolname = "helloWorld"
     max_trace_files = 200
 
     tools_executions_tool = Tool(
@@ -74,9 +75,20 @@ class MCPServer:
                         }
             )
 
+    hello_world_tool = Tool(
+            name=hello_world_toolname,
+            title="Hello World Test Tool",
+            description="A simple test tool that returns a greeting message. Use this to verify that Aegra can successfully call custom MCP tools. No parameters required.",
+            input_schema={
+                'type': 'object',
+                'properties': {},
+                'required': []
+            }
+            )
+
     DEFAULT_JWT_ALGORITHMS = ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256"]
     DEFAULT_TOKEN_VALIDATION_ORDER = ["jwks", "introspect", "userinfo"]
-  
+
     def __init__(self, credentials: Credentials,
                  tags: list[str] = [], tools: list[str] = [], no_tools: list[str] = [],
                  trace: list[str] = [], traces_dir: str = None, traces_maxsize: int = max_trace_files,
@@ -446,7 +458,9 @@ class MCPServer:
         elif credentials.isResMonitor:  res_repository = self.repository_res_monitor
         else:                           res_repository = {}
 
-        tools = [MCPServer.tools_executions_tool] if self.trace_recorder.trace_executions else []
+        tools = [MCPServer.hello_world_tool]  # Always include the test tool
+        if self.trace_recorder.trace_executions:
+            tools.append(MCPServer.tools_executions_tool)
         for tool_name, endpoint in dc_repository.items():
             tools.append(endpoint.tool)
         for tool_name, endpoint in res_repository.items():
@@ -464,6 +478,20 @@ class MCPServer:
             with_content = arguments.get('with_content', False) if arguments else False
             return self.trace_recorder.get_executions(filter=filter, with_content=with_content)
 
+        def hello_world(arguments):
+            """Handle the hello_world test tool - simplified version with no parameters"""
+            return {
+                "status": "success",
+                "message": "Hello from IBM ODM Management MCP Server! This tool is working correctly.",
+                "timestamp": __import__('datetime').datetime.now().isoformat(),
+                "server_info": {
+                    "name": "IBM ODM Management MCP Server",
+                    "transport": self.transport,
+                    "odm_url": self.credentials.odm_url if self.credentials.odm_url else "Not configured",
+                    "odm_res_url": self.credentials.odm_res_url if self.credentials.odm_res_url else "Not configured"
+                }
+            }
+
         if self.logger.isEnabledFor(logging.DEBUG): self.logger.debug("Calling tool '%s' with arguments: %s", name, arguments)
         else:                                             self.logger.info ("Calling tool '%s'", name)
 
@@ -477,7 +505,9 @@ class MCPServer:
         # update the list of tools (skipped if it was already generated during startup or by list_tools)
         self.update_repository(credentials)
 
-        if name == MCPServer.get_tools_executions_toolname:
+        if name == MCPServer.hello_world_toolname:
+            result = hello_world(arguments)
+        elif name == MCPServer.get_tools_executions_toolname:
             executions = get_tools_executions(arguments)
             result = { "executions": executions }
             is_error = False
